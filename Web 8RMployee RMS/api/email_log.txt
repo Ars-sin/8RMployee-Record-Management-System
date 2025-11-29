@@ -1,0 +1,551 @@
+[2025-10-07 10:57:07] Raw input received: {"employee_id":12345,"email":"arslandef1@gmail.com","month_covered":10,"year_covered":2025,"remittances":[{"type":"SSS","amount":"500.00"},{"type":"PhilHealth","amount":"300.00"}]}
+[2025-10-07 10:57:07] Decoded input: Array
+(
+    [employee_id] => 12345
+    [email] => arslandef1@gmail.com
+    [month_covered] => 10
+    [year_covered] => 2025
+    [remittances] => Array
+        (
+            [0] => Array
+                (
+                    [type] => SSS
+                    [amount] => 500.00
+                )
+
+            [1] => Array
+                (
+                    [type] => PhilHealth
+                    [amount] => 300.00
+                )
+
+        )
+
+)
+
+[2025-10-07 10:57:07] Parsed - Email: arslandef1@gmail.com, Employee ID: 12345, Month: 10, Year: 2025
+[2025-10-07 10:57:07] Exception: Table 'u987478351_8rm_admin.employees' doesn't exist
+[2025-10-07 10:57:07] Stack trace: #0 /home/u987478351/domains/8rmployee.swuitapp.com/public_html/api/send_remittance_email.php(73): mysqli->prepare()
+#1 {main}
+[2025-10-07 10:57:07] Script completed
+Test entry at 2025-10-07 11:16:53
+Test entry at 2025-10-07 11:17:57
+Test entry at 2025-10-07 11:19:59
+Test entry at 2025-10-07 11:20:24
+Test entry at 2025-10-07 11:23:21
+Test entry at 2025-10-07 11:23:23
+Test entry at 2025-10-07 11:33:50
+Test entry at 2025-10-07 11:33:53
+Test entry at 2025-10-07 11:38:24
+Test entry at 2025-10-07 11:40:07
+Test entry at 2025-10-07 11:40:13
+Test entry at 2025-10-07 11:40:30
+
+
+package com.example.a8rmployeefinal.ui.Remittances;
+
+import android.app.Dialog;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
+import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.Toast;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.DialogFragment;
+
+import com.example.a8rmployeefinal.Model.Employee;
+import com.example.a8rmployeefinal.R;
+import com.example.a8rmployeefinal.api.ApiResponse;
+import com.example.a8rmployeefinal.api.ApiService;
+import com.example.a8rmployeefinal.api.RetrofitClient;
+import com.example.a8rmployeefinal.databinding.FragmentAddRemittanceBinding;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+public class AddRemittanceFragment extends DialogFragment {
+
+    private FragmentAddRemittanceBinding binding;
+    private final int MAX_REMITTANCE_FIELDS = 3;
+    private HashMap<String, Integer> employeeMap = new HashMap<>();
+    private HashMap<Integer, String> employeeEmailMap = new HashMap<>();
+    private OnRemittanceAddedListener listener;
+
+    public interface OnRemittanceAddedListener {
+        void onRemittanceAdded();
+    }
+
+    public void setOnRemittanceAddedListener(OnRemittanceAddedListener listener) {
+        this.listener = listener;
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        binding = FragmentAddRemittanceBinding.inflate(inflater, container, false);
+        return binding.getRoot();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        Dialog dialog = getDialog();
+        if (dialog != null) {
+            Window window = dialog.getWindow();
+            if (window != null) {
+                int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.95);
+                int height = (int) (getResources().getDisplayMetrics().heightPixels * 0.90);
+                window.setLayout(width, height);
+            }
+        }
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        setupInitialState();
+        setupListeners();
+    }
+
+    private void setupInitialState() {
+        fetchEmployeesForSearch();
+        addEmployeeSection();
+    }
+
+    private void fetchEmployeesForSearch() {
+        ApiService apiService = RetrofitClient.getApiService();
+        apiService.getEmployees(null, null).enqueue(new Callback<List<Employee>>() {
+            @Override
+            public void onResponse(@NonNull Call<List<Employee>> call, @NonNull Response<List<Employee>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    employeeMap.clear();
+                    employeeEmailMap.clear();
+                    for (Employee employee : response.body()) {
+                        String fullName = employee.getLastName() + ", " + employee.getFirstName();
+                        employeeMap.put(fullName, employee.getId());
+                        employeeEmailMap.put(employee.getId(), employee.getEmail());
+                    }
+                    updateAllEmployeeAdapters();
+                }
+            }
+            @Override
+            public void onFailure(@NonNull Call<List<Employee>> call, @NonNull Throwable t) {
+                Toast.makeText(getContext(), "Failed to load employees", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void updateAllEmployeeAdapters() {
+        List<String> employeeNames = new ArrayList<>(employeeMap.keySet());
+        java.util.Collections.sort(employeeNames);
+
+        for (int i = 0; i < binding.employeeSectionsContainer.getChildCount(); i++) {
+            View employeeSection = binding.employeeSectionsContainer.getChildAt(i);
+            AutoCompleteTextView employeeNameField = employeeSection.findViewById(R.id.autoCompleteEmployeeName);
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(), android.R.layout.simple_dropdown_item_1line, employeeNames);
+            employeeNameField.setAdapter(adapter);
+        }
+    }
+
+    private void setupListeners() {
+        binding.closeButton.setOnClickListener(v -> dismiss());
+        binding.addEmployeeButton.setOnClickListener(v -> addEmployeeSection());
+        binding.submitButton.setOnClickListener(v -> collectAndSubmitData());
+    }
+
+    private void addEmployeeSection() {
+        LayoutInflater inflater = LayoutInflater.from(getContext());
+        View employeeView = inflater.inflate(R.layout.list_item_employee_remittance_section, binding.employeeSectionsContainer, false);
+
+        AutoCompleteTextView employeeNameField = employeeView.findViewById(R.id.autoCompleteEmployeeName);
+        List<String> employeeNames = new ArrayList<>(employeeMap.keySet());
+        java.util.Collections.sort(employeeNames);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(), android.R.layout.simple_dropdown_item_1line, employeeNames);
+        employeeNameField.setAdapter(adapter);
+        employeeNameField.setThreshold(1);
+
+        AutoCompleteTextView monthSpinner = employeeView.findViewById(R.id.spinnerMonthCovered);
+        String[] months = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+        ArrayAdapter<String> monthAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, months);
+        monthAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        monthSpinner.setAdapter(monthAdapter);
+
+        AutoCompleteTextView yearSpinner = employeeView.findViewById(R.id.spinnerYearCovered);
+        ArrayList<String> years = new ArrayList<>();
+        int currentYear = Calendar.getInstance().get(Calendar.YEAR);
+        for (int i = currentYear; i >= currentYear - 10; i--) {
+            years.add(Integer.toString(i));
+        }
+        ArrayAdapter<String> yearAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, years);
+        yearAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        yearSpinner.setAdapter(yearAdapter);
+        yearSpinner.setText(String.valueOf(currentYear), false);
+
+        LinearLayout remittanceFieldsContainer = employeeView.findViewById(R.id.remittanceFieldsContainer);
+
+        addRemittanceField(remittanceFieldsContainer, employeeView);
+
+        ImageButton addRemittanceButton = employeeView.findViewById(R.id.addRemittanceFieldButton);
+        addRemittanceButton.setOnClickListener(v -> {
+            if (remittanceFieldsContainer.getChildCount() < MAX_REMITTANCE_FIELDS) {
+                addRemittanceField(remittanceFieldsContainer, employeeView);
+            } else {
+                Toast.makeText(getContext(), "Maximum 3 remittances per employee", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        ImageButton removeEmployeeButton = employeeView.findViewById(R.id.removeEmployeeButton);
+        if (binding.employeeSectionsContainer.getChildCount() == 0) {
+            removeEmployeeButton.setVisibility(View.GONE);
+        }
+        removeEmployeeButton.setOnClickListener(v -> binding.employeeSectionsContainer.removeView(employeeView));
+
+        binding.employeeSectionsContainer.addView(employeeView);
+    }
+
+    private void addRemittanceField(LinearLayout container, View employeeView) {
+        LayoutInflater inflater = LayoutInflater.from(getContext());
+        View rowView = inflater.inflate(R.layout.list_item_add_remittance_row, container, false);
+
+        AutoCompleteTextView typeSpinner = rowView.findViewById(R.id.spinnerRemittanceType);
+        String[] remittanceTypes = {"SSS", "Pag-IBIG", "PhilHealth"};
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, remittanceTypes);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        typeSpinner.setAdapter(adapter);
+
+        ImageButton deleteButton = rowView.findViewById(R.id.deleteButton);
+        deleteButton.setVisibility(container.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+        deleteButton.setOnClickListener(v -> {
+            container.removeView(rowView);
+            ImageButton addButton = employeeView.findViewById(R.id.addRemittanceFieldButton);
+            addButton.setEnabled(true);
+        });
+
+        container.addView(rowView);
+
+        ImageButton addButton = employeeView.findViewById(R.id.addRemittanceFieldButton);
+        if (container.getChildCount() >= MAX_REMITTANCE_FIELDS) {
+            addButton.setEnabled(false);
+        }
+    }
+
+    private void collectAndSubmitData() {
+        List<Map<String, Object>> allEmployeeRemittances = new ArrayList<>();
+
+        for (int i = 0; i < binding.employeeSectionsContainer.getChildCount(); i++) {
+            View employeeSection = binding.employeeSectionsContainer.getChildAt(i);
+
+            AutoCompleteTextView employeeNameField = employeeSection.findViewById(R.id.autoCompleteEmployeeName);
+            AutoCompleteTextView monthSpinner = employeeSection.findViewById(R.id.spinnerMonthCovered);
+            AutoCompleteTextView yearSpinner = employeeSection.findViewById(R.id.spinnerYearCovered);
+            LinearLayout remittanceContainer = employeeSection.findViewById(R.id.remittanceFieldsContainer);
+
+            String employeeName = employeeNameField.getText().toString();
+            String monthStr = monthSpinner.getText().toString();
+            String yearStr = yearSpinner.getText().toString();
+
+            if (employeeName.isEmpty()) {
+                Toast.makeText(getContext(), "Please select employee for section " + (i + 1), Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            Integer employeeId = employeeMap.get(employeeName);
+            if (employeeId == null) {
+                Toast.makeText(getContext(), "Invalid employee selected in section " + (i + 1), Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            if (monthStr.isEmpty() || yearStr.isEmpty()) {
+                Toast.makeText(getContext(), "Please select month and year for " + employeeName, Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            String[] monthNames = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+            int monthInt = Arrays.asList(monthNames).indexOf(monthStr) + 1;
+
+            List<Map<String, String>> remittances = new ArrayList<>();
+            for (int j = 0; j < remittanceContainer.getChildCount(); j++) {
+                View remittanceRow = remittanceContainer.getChildAt(j);
+                AutoCompleteTextView typeSpinner = remittanceRow.findViewById(R.id.spinnerRemittanceType);
+                EditText amountEditText = remittanceRow.findViewById(R.id.editTextAmount);
+
+                String type = typeSpinner.getText().toString();
+                String amount = amountEditText.getText().toString();
+
+                if (type.isEmpty() || amount.isEmpty()) {
+                    Toast.makeText(getContext(), "Please fill all remittance fields for " + employeeName, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                try {
+                    double amountValue = Double.parseDouble(amount);
+                    if (amountValue <= 0) {
+                        Toast.makeText(getContext(), "Amount must be greater than 0 for " + employeeName, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                } catch (NumberFormatException e) {
+                    Toast.makeText(getContext(), "Invalid amount for " + employeeName, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                Map<String, String> remittance = new HashMap<>();
+                remittance.put("type", type);
+                remittance.put("amount", amount);
+                remittances.add(remittance);
+            }
+
+            if (remittances.isEmpty()) {
+                Toast.makeText(getContext(), "Please add at least one remittance for " + employeeName, Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            Map<String, Object> employeeData = new HashMap<>();
+            employeeData.put("employee_id", employeeId);
+            employeeData.put("month_covered", monthInt);
+            employeeData.put("year_covered", Integer.parseInt(yearStr));
+            employeeData.put("remittances", remittances);
+
+            allEmployeeRemittances.add(employeeData);
+        }
+
+        if (allEmployeeRemittances.isEmpty()) {
+            Toast.makeText(getContext(), "Please add at least one employee", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        submitRemittances(allEmployeeRemittances);
+    }
+
+    private void submitRemittances(List<Map<String, Object>> employeeRemittances) {
+        ApiService apiService = RetrofitClient.getApiService();
+
+        final int[] successCount = {0};
+        final int[] failureCount = {0};
+        final int totalCount = employeeRemittances.size();
+        final List<Integer> successfulEmployeeIds = new ArrayList<>();
+
+        for (Map<String, Object> employeeData : employeeRemittances) {
+            final int employeeId = (int) employeeData.get("employee_id");
+
+            apiService.addRemittances(employeeData).enqueue(new Callback<ApiResponse>() {
+                @Override
+                public void onResponse(@NonNull Call<ApiResponse> call, @NonNull Response<ApiResponse> response) {
+                    if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
+                        successCount[0]++;
+                        successfulEmployeeIds.add(employeeId);
+                    } else {
+                        failureCount[0]++;
+                    }
+                    checkCompletion();
+                }
+
+                @Override
+                public void onFailure(@NonNull Call<ApiResponse> call, @NonNull Throwable t) {
+                    failureCount[0]++;
+                    checkCompletion();
+                }
+
+                private void checkCompletion() {
+                    if (successCount[0] + failureCount[0] == totalCount) {
+                        if (failureCount[0] == 0) {
+                            sendEmailNotifications(successfulEmployeeIds, employeeRemittances);
+                            Toast.makeText(getContext(), "All remittances added successfully!", Toast.LENGTH_LONG).show();
+                            if (listener != null) {
+                                listener.onRemittanceAdded();
+                            }
+                            dismiss();
+                        } else if (successCount[0] > 0) {
+                            sendEmailNotifications(successfulEmployeeIds, employeeRemittances);
+                            Toast.makeText(getContext(), successCount[0] + " of " + totalCount + " remittances added successfully", Toast.LENGTH_LONG).show();
+                            if (listener != null) {
+                                listener.onRemittanceAdded();
+                            }
+                            dismiss();
+                        } else {
+                            Toast.makeText(getContext(), "Failed to add remittances", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    private void sendEmailNotifications(List<Integer> employeeIds, List<Map<String, Object>> employeeRemittances) {
+        if (employeeIds.isEmpty()) {
+            Log.w("RemittanceEmail", "No employee IDs to send emails to");
+            return;
+        }
+
+        ApiService apiService = RetrofitClient.getApiService();
+
+        Log.d("RemittanceEmail", "=== EMAIL NOTIFICATION STARTED ===");
+        Log.d("RemittanceEmail", "Total employees to notify: " + employeeIds.size());
+        Log.d("RemittanceEmail", "Employee IDs: " + employeeIds.toString());
+
+        for (int employeeId : employeeIds) {
+            String email = employeeEmailMap.get(employeeId);
+
+            Log.d("RemittanceEmail", "Processing employee ID: " + employeeId);
+            Log.d("RemittanceEmail", "Employee email: " + email);
+
+            if (email == null || email.isEmpty()) {
+                Log.w("RemittanceEmail", "No email found for employee ID: " + employeeId);
+                continue;
+            }
+
+            // Find the remittance data for this employee
+            Map<String, Object> employeeData = null;
+            for (Map<String, Object> data : employeeRemittances) {
+                if ((int) data.get("employee_id") == employeeId) {
+                    employeeData = data;
+                    break;
+                }
+            }
+
+            if (employeeData == null) {
+                Log.w("RemittanceEmail", "No remittance data found for employee ID: " + employeeId);
+                continue;
+            }
+
+            // Prepare email data
+            Map<String, Object> emailData = new HashMap<>();
+            emailData.put("email", email);
+            emailData.put("employee_id", employeeId);
+            emailData.put("month_covered", employeeData.get("month_covered"));
+            emailData.put("year_covered", employeeData.get("year_covered"));
+            emailData.put("remittances", employeeData.get("remittances"));
+
+            Log.d("RemittanceEmail", "Email data prepared: " + emailData.toString());
+
+            // Send email notification
+            apiService.sendRemittanceEmail(emailData).enqueue(new Callback<ApiResponse>() {
+                @Override
+                public void onResponse(@NonNull Call<ApiResponse> call, @NonNull Response<ApiResponse> response) {
+                    Log.d("RemittanceEmail", "Response code: " + response.code());
+
+                    if (response.isSuccessful() && response.body() != null) {
+                        Log.d("RemittanceEmail", "Response body: " + response.body().toString());
+
+                        if (response.body().isSuccess()) {
+                            Log.d("RemittanceEmail", "Email sent successfully to: " + email);
+                            Toast.makeText(getContext(), "Email sent to " + email, Toast.LENGTH_SHORT).show();
+                        } else {
+                            Log.e("RemittanceEmail", "Failed to send email to: " + email +
+                                    " - Message: " + response.body().getMessage());
+                        }
+                    } else {
+                        try {
+                            String errorBody = response.errorBody() != null ? response.errorBody().string() : "No error body";
+                            Log.e("RemittanceEmail", "Failed response for: " + email + " - Error: " + errorBody);
+                        } catch (Exception e) {
+                            Log.e("RemittanceEmail", "Error reading error body: " + e.getMessage());
+                        }
+                    }
+                }
+
+                @Override
+                public void onFailure(@NonNull Call<ApiResponse> call, @NonNull Throwable t) {
+                    Log.e("RemittanceEmail", "Network error sending email to: " + email, t);
+                    Log.e("RemittanceEmail", "Error message: " + t.getMessage());
+                    Toast.makeText(getContext(), "Failed to send email to " + email, Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        binding = null;
+    }
+}Test entry at 2025-10-08 09:44:35
+[2025-10-08 10:03:39] ========================================
+[2025-10-08 10:03:39] Script accessed from: 180.190.6.106
+[2025-10-08 10:03:39] === EMAIL SCRIPT STARTED ===
+[2025-10-08 10:03:39] Request method: POST
+[2025-10-08 10:03:39] Raw input length: 141
+[2025-10-08 10:03:39] Raw input: {"employee_id":1,"remittances":[{"amount":"9000","type":"PhilHealth"}],"year_covered":2025,"month_covered":12,"email":"arslandef1@gmail.com"}
+[2025-10-08 10:03:39] Decoded input: Array
+(
+    [employee_id] => 1
+    [remittances] => Array
+        (
+            [0] => Array
+                (
+                    [amount] => 9000
+                    [type] => PhilHealth
+                )
+
+        )
+
+    [year_covered] => 2025
+    [month_covered] => 12
+    [email] => arslandef1@gmail.com
+)
+
+[2025-10-08 10:03:39] Parsed - Email: arslandef1@gmail.com, Employee ID: 1, Month: 12, Year: 2025
+[2025-10-08 10:03:39] Connecting to database...
+[2025-10-08 10:03:39] Employee found: test test
+[2025-10-08 10:03:39] Processing 1 remittances
+[2025-10-08 10:03:39] Remittance 0: Array
+(
+    [amount] => 9000
+    [type] => PhilHealth
+)
+
+[2025-10-08 10:03:39] Total amount: ₱9,000.00
+[2025-10-08 10:03:39] Attempting to send email
+[2025-10-08 10:03:39] To: arslandef1@gmail.com
+[2025-10-08 10:03:39] From: noreply@8rmployee.swuitapp.com
+[2025-10-08 10:03:39] Subject: Remittance Payment Confirmation - December 2025
+[2025-10-08 10:03:39] Headers: MIME-Version: 1.0 | Content-type: text/html; charset=UTF-8 | From: HR Department <noreply@8rmployee.swuitapp.com> | Reply-To: noreply@8rmployee.swuitapp.com | X-Mailer: PHP/8.2.28 | X-Priority: 3
+[2025-10-08 10:03:39] ✓ Email sent successfully to arslandef1@gmail.com
+[2025-10-08 10:03:39] === EMAIL SCRIPT COMPLETED ===
+
+[2025-10-09 09:29:10] ========================================
+[2025-10-09 09:29:10] === EMAIL SCRIPT STARTED ===
+[2025-10-09 09:29:10] Request from: 180.190.6.106
+[2025-10-09 09:29:10] Request method: POST
+[2025-10-09 09:29:10] Raw input received (length: 135)
+[2025-10-09 09:29:10] Raw input: {"employee_id":19,"remittances":[{"amount":"1000","type":"SSS"}],"year_covered":2025,"month_covered":12,"email":"arslandef1@gmail.com"}
+[2025-10-09 09:29:10] JSON decoded successfully
+[2025-10-09 09:29:10] Parsed data:
+[2025-10-09 09:29:10]   - Email: arslandef1@gmail.com
+[2025-10-09 09:29:10]   - Employee ID: 19
+[2025-10-09 09:29:10]   - Month: 12
+[2025-10-09 09:29:10]   - Year: 2025
+[2025-10-09 09:29:10]   - Remittances count: 1
+[2025-10-09 09:29:10] ✓ All validations passed
+[2025-10-09 09:29:10] Connecting to database...
+[2025-10-09 09:29:10] ✓ Employee found: Charles Ambrad
+[2025-10-09 09:29:10] Period: December 2025
+[2025-10-09 09:29:10] Processing 1 remittances:
+[2025-10-09 09:29:10]   Remittance 1: SSS = ₱1,000.00
+[2025-10-09 09:29:10] Total amount: ₱1,000.00
+[2025-10-09 09:29:10] ========================================
+[2025-10-09 09:29:10] Sending email:
+[2025-10-09 09:29:10]   To: arslandef1@gmail.com
+[2025-10-09 09:29:10]   Subject: Government Remittance Notification - December 2025
+[2025-10-09 09:29:10]   From: noreply@8rmployee.swuitapp.com
+[2025-10-09 09:29:10] ========================================
+[2025-10-09 09:29:10] ✓✓✓ EMAIL SENT SUCCESSFULLY to: arslandef1@gmail.com
+[2025-10-09 09:29:10] ========================================
+[2025-10-09 09:29:10] === EMAIL SCRIPT COMPLETED ===
+[2025-10-09 09:29:10] ========================================
+
